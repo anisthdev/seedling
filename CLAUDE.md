@@ -8,21 +8,24 @@ History: this started as a GTK 4 / libadwaita app in Rust, now in `~/Projects/se
 
 ## How it runs
 
-Seedling is a Quickshell config that opens one normal app window (`FloatingWindow`), not a bar or panel:
+Seedling is a Quickshell config, separate from quickbar, that shows itself as one of the shell's menus: like the movie search (`quickbar/modules/MediaSearch.qml`), a full-screen overlay `PanelWindow` with a panel at the bottom centre that springs open upwards and folds back down. It stays running while closed (not polling the daemon) and opens on starting.
 
 ```
-qs -p ~/Projects/seedling
+qs -p ~/Projects/seedling                          # start (opens)
+qs -p ~/Projects/seedling ipc call seedling toggle  # also open, close
 ```
 
-No build step. Quickshell reloads the running app when a file changes; restart it if a change doesn't show. Logs go to stdout and `/run/user/1000/quickshell/by-id/*/log.qslog`.
+SUPER+T (`~/.config/hypr/bindings/utilities.lua`) runs `ipc call seedling toggle || uwsm app -- qs -p …`, so it starts Seedling when it isn't running. `q`/Esc on the list, Ctrl+w and a click outside close it.
+
+No build step. Quickshell reloads the running app when a file changes; restart it if a change doesn't show (a failed load can leave it without keyboard focus). Logs go to stdout and `/run/user/1000/quickshell/by-id/*/log.qslog`.
 
 Seedling is only a **client**: all BitTorrent work is done by `transmission-daemon` over its RPC. The daemon is always local (`localhost:9091`); no remote-connection UI.
 
 ## Layout
 
 ```
-shell.qml           # entry: pragmas, ShellRoot { AppWindow {} }
-AppWindow.qml       # the window; key dispatch (overlays first, then the current view)
+shell.qml           # entry: pragmas, ShellRoot { Menu {} }
+Menu.qml            # the menu: layer surface, panel, open/close, IPC; key dispatch (overlays first, then the current view)
 Theme.qml           # singleton: matugen palette, fonts, radii, motion (copied from quickbar)
 Transmission.qml    # singleton: RPC, polling, torrents/byId, commands
 Format.qml          # singleton: what a torrent shows (sizes, status text, progress, colours)
@@ -37,19 +40,19 @@ Copied quickbar files say so in their header (with the quickbar commit). They ar
 
 Everything must be doable from the keyboard, with tremc's bindings (`/usr/bin/tremc`, `self.actions` near line 380, lists every action, its keys and where it applies). Mouse use works too but is secondary.
 
-- Keys are handled in one place per view (`AppWindow.handleKey` → overlay or view). Match letters on `event.text` (so `p` and `P` differ), special keys on `event.key`.
+- Keys are handled in one place per view (`Menu.handleKey` → overlay or view). Match letters on `event.text` (so `p` and `P` differ), special keys on `event.key`.
 - An open dialog or overlay takes every key until it closes. Dialogs answer tremc style: `y`/Enter yes, `n`/`q`/Esc no.
-- `?`/F1 shows every key of the current view; keep `AppWindow.listBindings`/`detailsBindings` (and the shared `torrentBindings`) in sync when adding keys.
+- `?`/F1 shows every key of the current view; keep `Menu.listBindings`/`detailsBindings` (and the shared `torrentBindings`) in sync when adding keys.
 - No focus rings (user's choice): the keyboard's current row is shown by its fill (`secondary_container`, all corners rounded).
 
-Implemented: list movement (`j k`, arrows, `gg G`, Home/End, Ctrl+f/b, PgUp/PgDn, Ctrl+d/u, Ctrl+n/p), `p` `P` `N` `v`/`y` `r`/Del `R`/Shift+Del `L`, `?`/F1, `q`, Ctrl+w. Details (Enter/`l`/Right or double-click; back `q`/Esc/Backspace): `o` `f` Tab/Shift+Tab; overview scrolls with the list keys, `h`/`l` switch tabs; files: list movement, `h`/`l` priority (selection, else current; tremc's stepping from the lowest/highest), Space, `a`, Esc drops the selection; `p` `P` `N` `v` `L` `R` act on the open torrent.
+Implemented: list movement (`j k`, arrows, `gg G`, Home/End, Ctrl+f/b, PgUp/PgDn, Ctrl+d/u, Ctrl+n/p), `p` `P` `N` `v`/`y` `r`/Del `R`/Shift+Del `L`, `?`/F1, `q`, Ctrl+w. Details (Enter/`l`/Right or double-click; back `q`/Esc/Backspace): `o` `f` Tab/Shift+Tab; overview (a summary, Space shows more details) scrolls with the list keys, `h`/`l` switch tabs; files: list movement, `h`/`l` priority (selection, else current; tremc's stepping from the lowest/highest), Space, `a`, Esc drops the selection; `p` `P` `N` `v` `L` `R` act on the open torrent.
 
 ## Design
 
 Look like the shell's menus; check its components (`components/ListItem.qml`, `LinearProgress.qml`, `Dropdown.qml`, `modules/DownloadsCard.qml`) before designing something new.
 
-- Colours: `Theme` properties named after Material roles, loaded from `~/.config/waybar/colors.css` (matugen) like the shell. Never hard-code hues. Theme colours are see-through (`Theme.alpha`, 85%) like the shell's menus. The window is the card (like the launcher's panel): `surface_container` at 97%. The menus are 85% but open over (dark) windows; Seedling sits over the bright blurred wallpaper, which at 85% washes it out. 97% measured the same as the control panel over a terminal (screenshot pixel samples). A rule in `~/.config/hypr/windows.lua` for Seedling's class stops Hyprland dimming it further (`opacity = "1.0 override 1.0 override"`) and gives it the menus' round 16px corners. Cards over the window's own content (dialogs, help) use `Qt.alpha(colour, 1)`.
-- Layout like the launcher menu (`quickbar/components/LauncherWindow.qml`): padding 20 sides, 26 top, 20 bottom; title 26px `Theme.titleWeight` in `primary`; grouped list 2px apart, radius 10 outside / 3 between, rows `surface_container_high` on a layer under a sliding `secondary_container` fill (220 ms); row text inset 18px, title 14px, detail 12px `on_surface_variant`.
+- Colours: `Theme` properties named after Material roles, loaded from `~/.config/waybar/colors.css` (matugen) like the shell. Never hard-code hues. Theme colours are see-through (`Theme.alpha`, 85%) like the shell's menus. The panel is plain `Theme.surface_container`, radius `Theme.cardRadius`, exactly as the menus' panels. Its layer uses the menus' namespace `quickbar-overlay`, so Hyprland's layer rules (`looknfeel.lua`: blur, no layer slide) treat it as one of them; that's what makes it match. Cards over the panel's own content (dialogs, help) use `Qt.alpha(colour, 1)`; the panel grows to fit an open one (their `wanted`).
+- Layout like the launcher menu (`quickbar/components/LauncherWindow.qml`): panel 820 wide (the grown movie search), 16px off the bottom, as tall as the page wants (views' `implicitHeight`, rows measured on a hidden probe row) up to most of the screen; padding 20 sides, 26 top, 20 bottom; title 26px `Theme.titleWeight` in `primary`; grouped list 2px apart, radius 10 outside / 3 between, rows `surface_container_high` on a layer under a sliding `secondary_container` fill (220 ms); row text inset 18px, title 14px, detail 12px `on_surface_variant`.
 - Progress: `LinearProgress` (M3: 4px, gap, stop dot; no wavy animation, by choice). Download `primary`, seeding `tertiary` (filling toward the seed ratio limit), paused `outline`, error `error`.
 - Type: `Label` (Google Sans Flex with the shell's weight axis); titles 24px, `Font.Normal`, `roundness: Theme.titleRoundness`; row title 14px, detail 12px `on_surface_variant`.
 - Motion: the shell's curves and durations (`Theme.emphasizedDecel`, `animFast`, `animNormal`).
@@ -71,8 +74,8 @@ Reference: Transmission's `docs/rpc-spec.md`. Check it when unsure of a field na
 No automated UI tests. Test against a real daemon:
 
 - The user's own daemon only for **looking** (opening the app, moving the cursor). Never pause, verify, remove or change their torrents.
-- Actions in a throwaway daemon in a private network namespace, with small locally created torrents (`transmission-create`); there `localhost:9091` is the sandbox's daemon. What works: `unshare -rn sh -c 'ip link set lo up && exec unshare --map-user=1000 --map-group=1000 inner.sh'` (the nested map lets Qt reach the Wayland socket), where `inner.sh` starts `transmission-daemon -g <dir> -w <data>`, adds the torrents and `exec`s `qs -p`. Stop your own Seedling first (two windows share the class). Check results with `nsenter -t <qs pid> -U -n --preserve-credentials transmission-remote 9091 …`. Clean up by pid: `pkill -f <pattern>` matches the shell running it.
-- Run the app visibly on the user's screen (they like to watch). Send keys only to Seedling's window: `hyprctl dispatch 'hl.dsp.send_shortcut({ mods = "", key = "j", window = "class:io.github.anisthdev.Seedling" })'`. `?` is `key = "slash"` with `SHIFT`. Popups need real focus; if you give Seedling focus with `hl.dsp.focus`, hand it back afterwards.
+- Actions in a throwaway daemon in a private network namespace, with small locally created torrents (`transmission-create`); there `localhost:9091` is the sandbox's daemon. What works: `unshare -rn sh -c 'ip link set lo up && exec unshare --map-user=1000 --map-group=1000 inner.sh'` (the nested map lets Qt reach the Wayland socket), where `inner.sh` starts `transmission-daemon -g <dir> -w <data>`, adds the torrents and `exec`s `qs -p`. Stop your own Seedling first (both would answer the same IPC). Check results with `nsenter -t <qs pid> -U -n --preserve-credentials transmission-remote 9091 …`. Clean up by pid: `pkill -f <pattern>` matches the shell running it.
+- Run the app visibly on the user's screen (they like to watch). While open the menu takes the keyboard (exclusive focus), so send keys with `wtype` (`wtype j`, `wtype -k Return`, `wtype '?'`). Check first that it really is open (`hyprctl layers -j`: a `quickbar-overlay` layer whose pid is Seedling's `qs`), or the keys land in the user's terminal. Close it afterwards (`ipc call seedling close`) to give the keyboard back.
 
 ## Plan
 

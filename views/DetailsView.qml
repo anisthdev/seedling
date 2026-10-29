@@ -17,6 +17,9 @@ Item {
 
     signal back
 
+    // Its whole height, for the menu to fit
+    implicitHeight: pages.y + (tab === 0 ? overview.contentHeight : files.implicitHeight)
+
     // A fresh start for another torrent
     function reset() {
         tab = 0;
@@ -188,6 +191,8 @@ Item {
     }
 
     Item {
+        id: pages
+
         anchors.top: status.bottom
         anchors.topMargin: 14
         anchors.bottom: parent.bottom

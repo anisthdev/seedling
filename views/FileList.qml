@@ -24,6 +24,17 @@ Item {
     }
     readonly property int currentFile: order[list.currentIndex] ?? -1
 
+    // Its whole height, for the menu to fit (see TorrentList)
+    implicitHeight: list.count * probe.height + Math.max(0, list.count - 1) * list.spacing
+
+    FileRow {
+        id: probe
+
+        modelData: -1
+        index: -1
+        visible: false
+    }
+
     function reset() {
         selected = {};
         list.currentIndex = 0;
@@ -150,7 +161,9 @@ Item {
                 bottomLeftRadius: bottomCorners
                 bottomRightRadius: bottomCorners
                 color: row.hovered ? Theme.surface_container_highest : Theme.surface_container_high
-                visible: !row.current
+                // Fades as the fill arrives: hidden at once, the darker
+                // panel would show until the fill got there
+                opacity: row.current ? Math.min(1, Math.abs((list.highlightItem?.y ?? row.y) - row.y) / row.height) : 1
             }
         }
     }

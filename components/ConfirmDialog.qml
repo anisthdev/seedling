@@ -12,6 +12,8 @@ Item {
     property string body
     property string confirmText
     property var onConfirm: null
+    // The height it needs, for the menu to make room
+    readonly property real wanted: open ? content.implicitHeight + 48 + 48 : 0
 
     // Asks; `confirmed` runs if the answer is yes
     function ask(title, body, confirmText, confirmed) {

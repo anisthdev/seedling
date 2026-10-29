@@ -8,6 +8,8 @@ Item {
 
     property bool open: false
     property var bindings: []
+    // The height it needs, for the menu to make room
+    readonly property real wanted: open ? content.implicitHeight + 48 + 48 : 0
 
     function handleKey(event) {
         open = false;

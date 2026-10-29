@@ -32,6 +32,9 @@ Singleton {
     property double changedAt: 0
     readonly property int settleTime: 2000
 
+    // Polling on; the menu turns it off while closed
+    property bool active: true
+
     property int polls: 0
     // Daemon settings change rarely: fetched every this many polls
     readonly property int sessionEvery: 15
@@ -297,7 +300,7 @@ Singleton {
 
     Timer {
         interval: 2000
-        running: true
+        running: root.active
         repeat: true
         triggeredOnStart: true
         onTriggered: root.refresh()

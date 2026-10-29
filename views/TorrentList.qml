@@ -12,6 +12,19 @@ Item {
     property alias view: list
     readonly property var current: Transmission.byId[Transmission.ids[list.currentIndex]] ?? null
 
+    // Its whole height, for the menu to fit. Rows are all one height,
+    // measured on a hidden one: the list's own contentHeight depends on its
+    // height, which this sets.
+    implicitHeight: list.y + list.count * probe.height + Math.max(0, list.count - 1) * list.spacing
+
+    TorrentRow {
+        id: probe
+
+        modelData: -1
+        index: -1
+        visible: false
+    }
+
     // A row was double-clicked (it's current by then)
     signal activated
 
@@ -86,7 +99,8 @@ Item {
             }
 
             // The row's background, moved under the sliding fill. The
-            // current row's is hidden, so the fill's round corners show.
+            // current row's goes once the fill is over it, so the fill's
+            // round corners show.
             Rectangle {
                 readonly property real topCorners: row.index === 0 ? Theme.radius : 3
                 readonly property real bottomCorners: row.index === list.count - 1 ? Theme.radius : 3
@@ -102,7 +116,9 @@ Item {
                 bottomLeftRadius: bottomCorners
                 bottomRightRadius: bottomCorners
                 color: row.hovered ? Theme.surface_container_highest : Theme.surface_container_high
-                visible: !row.current
+                // Fades as the fill arrives: hidden at once, the darker
+                // panel would show until the fill got there
+                opacity: row.current ? Math.min(1, Math.abs((list.highlightItem?.y ?? row.y) - row.y) / row.height) : 1
             }
         }
 

@@ -180,15 +180,16 @@ Singleton {
         return `${Math.floor(fraction * 1000) / 10}%`;
     }
 
-    // What seedRatioMode means for this torrent
+    // What seedRatioMode means for this torrent: "3.00 (default)", "2.50",
+    // "no limit"
     function ratioLimitText(t) {
         switch (t.seedRatioMode) {
         case 0:
-            return Transmission.globalRatioLimit > 0 ? `Default (${ratio(Transmission.globalRatioLimit)})` : "Default (unlimited)";
+            return Transmission.globalRatioLimit > 0 ? `${ratio(Transmission.globalRatioLimit)} (default)` : "no limit (default)";
         case 1:
             return ratio(t.seedRatioLimit);
         }
-        return "Unlimited";
+        return "no limit";
     }
 
     // A file's priority level (see Transmission.fileLevel)

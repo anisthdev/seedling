@@ -16,6 +16,8 @@ Item {
     property var check: null
     property var onAnswer: null
     property string problem
+    // The height it needs, for the menu to make room
+    readonly property real wanted: open ? content.implicitHeight + 48 + 48 : 0
 
     // Focus goes back here on closing
     property Item returnFocus: null
