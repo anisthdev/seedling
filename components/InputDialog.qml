@@ -4,8 +4,9 @@ import ".."
 // A Material 3 dialog asking for a line of text, over a scrim, as tremc's
 // number prompts: Enter answers, Esc cancels. `check` turns the text into
 // the answer, as { value }, or returns a string saying what's wrong with
-// it. While open
-// it takes every key: the field gets them first (see handleKey).
+// it. For a path, `options` turns on Tab completion and Up/Down choices
+// (see PathField). While open it takes every key: the field gets them
+// first (see handleKey).
 Item {
     id: root
 
@@ -22,17 +23,20 @@ Item {
     // Focus goes back here on closing
     property Item returnFocus: null
 
-    function ask(title, body, text, confirmText, check, answered) {
+    // options: { completion: "files" | "dirs", choices: [paths] }
+    function ask(title, body, text, confirmText, check, answered, options) {
         root.title = title;
         root.body = body;
         root.confirmText = confirmText;
         root.check = check;
         onAnswer = answered;
-        problem = "";
+        field.completion = options?.completion ?? "";
+        field.choices = options?.choices ?? [];
+        field.choice = -1;
         field.text = text;
-        field.selectAll();
+        problem = "";
         open = true;
-        field.forceActiveFocus();
+        field.takeFocus(true);
     }
 
     function close() {
@@ -43,7 +47,7 @@ Item {
 
     function submit() {
         const answer = check ? check(field.text) : {
-            value: field.text
+            value: field.expanded
         };
         if (typeof answer === "string") {
             problem = answer;
@@ -123,42 +127,12 @@ Item {
                 wrapMode: Text.WordWrap
             }
 
-            // The launcher's field, outlined while typing into it
-            Rectangle {
-                width: parent.width
-                height: 46
-                radius: Theme.radius
-                color: Qt.alpha(Theme.surface_container_highest, 1)
-                border.width: 2
-                border.color: root.problem ? Theme.error : Theme.primary
+            PathField {
+                id: field
 
-                TextInput {
-                    id: field
-
-                    anchors.left: parent.left
-                    anchors.leftMargin: 16
-                    anchors.right: parent.right
-                    anchors.rightMargin: 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: Theme.on_surface
-                    selectionColor: Theme.primary
-                    selectedTextColor: Theme.on_primary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 16
-                    font.weight: Font.Medium
-                    clip: true
-                    onTextChanged: root.problem = ""
-
-                    Keys.onPressed: event => {
-                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                            root.submit();
-                        else if (event.key === Qt.Key_Escape)
-                            root.close();
-                        else
-                            return;
-                        event.accepted = true;
-                    }
-                }
+                onTextChanged: root.problem = ""
+                onSubmitted: root.submit()
+                onCancelled: root.close()
             }
 
             Label {

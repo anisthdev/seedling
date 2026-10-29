@@ -183,6 +183,15 @@ Item {
         selected = {};
     }
 
+    // Puts the pick on a torrent, now or as soon as it shows up (one just
+    // added)
+    function follow(id) {
+        list.currentId = id;
+        const index = shownIds.indexOf(id);
+        if (index >= 0)
+            list.currentIndex = index;
+    }
+
     function startSearch() {
         field.forceActiveFocus();
         field.selectAll();

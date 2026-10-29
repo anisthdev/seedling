@@ -25,6 +25,8 @@ Singleton {
 
     // The daemon's own seed ratio limit, or -1 when it has none on
     property real globalRatioLimit: -1
+    // Where the daemon puts new torrents
+    property string downloadDir
 
     // When the model last changed here rather than in the daemon. The
     // daemon applies some commands (stop, remove) on its own ~1 s timer,
@@ -114,8 +116,11 @@ Singleton {
         refreshDetails();
         if (polls % sessionEvery === 0)
             rpc("session-get", {
-                fields: ["seedRatioLimit", "seedRatioLimited"]
-            }, args => globalRatioLimit = args.seedRatioLimited ? args.seedRatioLimit : -1);
+                fields: ["seedRatioLimit", "seedRatioLimited", "download-dir"]
+            }, args => {
+                globalRatioLimit = args.seedRatioLimited ? args.seedRatioLimit : -1;
+                downloadDir = args["download-dir"];
+            });
         polls++;
     }
 
@@ -283,6 +288,45 @@ Singleton {
         rpc("torrent-set", args, null, message => failed(`Couldn’t set the seed ratio limit: ${message}`));
         for (const id of ids)
             assume(id, changes);
+    }
+
+    // A magnet link, URL or .torrent file (a path the daemon can read: it
+    // runs as the user); `done` gets the torrent and whether it was already
+    // there
+    function add(link, dir, paused, done) {
+        const args = {
+            filename: link,
+            paused: paused
+        };
+        if (dir)
+            args["download-dir"] = dir;
+        rpc("torrent-add", args, reply => {
+            const added = reply["torrent-added"];
+            done?.(added ?? reply["torrent-duplicate"], !added);
+            refresh();
+        }, message => failed(`Couldn’t add the torrent: ${message === "unrecognized info" ? "it isn’t a torrent, or the file can’t be read" : message}`));
+    }
+
+    // Moves the torrents' data to `dir`, as tremc's m
+    function move(ids, dir) {
+        if (ids.length === 0)
+            return;
+        rpc("torrent-set-location", {
+            ids: ids,
+            location: dir,
+            move: true
+        }, () => refresh(), message => failed(`Couldn’t move: ${message}`));
+        for (const id of ids)
+            assume(id, {
+                downloadDir: dir
+            });
+    }
+
+    // Free space where `path` is, in bytes, to `done`
+    function freeSpace(path, done) {
+        rpc("free-space", {
+            path: path
+        }, args => done(args["size-bytes"]), () => done(-1));
     }
 
     // Never with no ids: the daemon would remove every torrent

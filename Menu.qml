@@ -19,8 +19,8 @@ Scope {
     readonly property bool detailsOpen: Transmission.detailsId >= 0
 
     // [keys, what they do], for the key help (?)
-    readonly property var torrentBindings: [["p", "Pause or resume"], ["P", "Pause or resume all shown"], ["N", "Start now, skipping the queue"], ["v y", "Verify local data"], ["L", "Seed ratio limit"], ["R  Shift+Del", "Remove one, deleting its files"]]
-    readonly property var listBindings: [["j k  ↓ ↑", "Move"], ["Ctrl+f Ctrl+b", "Page down, up"], ["Ctrl+d Ctrl+u", "Half a page down, up"], ["gg G", "First, last torrent"], ["Enter l  →", "Details"], ["/", "Find by name"], ["f", "Filter"], ["s", "Sort"], ["Space", "Select, and move down"], ["A", "Select all or none"], ["i", "Invert the selection"], ["", "The rest act on the selection, else the current one:"], ...torrentBindings, ["r  Del", "Remove, keeping the files"], ["?  F1", "These keys"], ["Esc", "Drop the selection, the search, then close"], ["q  Ctrl+w", "Close"]]
+    readonly property var torrentBindings: [["p", "Pause or resume"], ["P", "Pause or resume all shown"], ["N", "Start now, skipping the queue"], ["v y", "Verify local data"], ["L", "Seed ratio limit"], ["m", "Move the data"], ["R  Shift+Del", "Remove one, deleting its files"]]
+    readonly property var listBindings: [["j k  ↓ ↑", "Move"], ["Ctrl+f Ctrl+b", "Page down, up"], ["Ctrl+d Ctrl+u", "Half a page down, up"], ["gg G", "First, last torrent"], ["Enter l  →", "Details"], ["a  Ctrl+a", "Add a torrent, or add it paused"], ["/", "Find by name"], ["f", "Filter"], ["s", "Sort"], ["Space", "Select, and move down"], ["A", "Select all or none"], ["i", "Invert the selection"], ["", "The rest act on the selection, else the current one:"], ...torrentBindings, ["r  Del", "Remove, keeping the files"], ["?  F1", "These keys"], ["Esc", "Drop the selection, the search, then close"], ["q  Ctrl+w", "Close"]]
     readonly property var detailsBindings: [["o f", "Overview, files"], ["Tab Shift+Tab", "Next, previous tab"], ["j k  gg G", "Move, scroll"], ["h l  ← →", "Files: lower, raise priority"], ["", "Overview: previous, next tab"], ["Space", "Files: select; overview: more details"], ["a", "Select all files or none"], ...torrentBindings, ["q  Esc  Backspace", "Back to the list"], ["?  F1", "These keys"], ["Ctrl+w", "Close"]]
 
     function show() {
@@ -46,6 +46,8 @@ Scope {
             return input.handleKey(event);
         if (picker.open)
             return picker.handleKey(event);
+        if (adder.open)
+            return adder.handleKey(event);
         if (event.key === Qt.Key_W && event.modifiers & Qt.ControlModifier) {
             hide();
             return true;
@@ -67,6 +69,10 @@ Scope {
             return true;
 
         const t = torrents.current;
+        if (ctrl && event.key === Qt.Key_A) {
+            askAdd(true);
+            return true;
+        }
         switch (event.key) {
         case Qt.Key_Return:
         case Qt.Key_Enter:
@@ -115,6 +121,9 @@ Scope {
             case "A":
                 torrents.selectAll();
                 return true;
+            case "a":
+                askAdd(false);
+                return true;
             case "i":
                 torrents.invertSelection();
                 return true;
@@ -153,8 +162,41 @@ Scope {
         case "L":
             askSeedRatio(list);
             return true;
+        case "m":
+            askMove(list);
+            return true;
         }
         return false;
+    }
+
+    // Where torrents go: the daemon's own folder, then the ones in use
+    function folders() {
+        const all = [Transmission.downloadDir, ...Transmission.torrents.map(t => t.downloadDir)].filter(d => d).map(d => torrents.folder(d));
+        return [...new Set(all)];
+    }
+
+    // As tremc's a and Ctrl+a
+    function askAdd(paused) {
+        adder.ask(paused, (link, dir) => Transmission.add(link, dir, paused, (t, duplicate) => {
+            if (!t)
+                return;
+            snackbar.show(duplicate ? `Already added: “${t.name}”` : `Added “${t.name}”`);
+            if (!detailsOpen)
+                torrents.follow(t.id);
+        }));
+    }
+
+    // As tremc's m: moves the data, starting from the first one's folder
+    function askMove(list) {
+        if (list.length === 0)
+            return;
+        const ids = list.map(t => t.id);
+        input.ask("Move to", `${describe(list)} ${list.length === 1 ? "moves" : "move"} to this folder, files and all. Tab completes; ↑ ↓ go through the folders in use.`, torrents.folder(list[0].downloadDir).replace(Quickshell.env("HOME"), "~") + "/", "Move", text => text.trim() === "" ? "Give a folder" : {
+                value: text.trim().replace(/^~(?=\/|$)/, Quickshell.env("HOME")).replace(/\/+$/, "")
+            }, dir => Transmission.move(ids, dir), {
+            completion: "dirs",
+            choices: folders()
+        });
     }
 
     // As tremc's f: what to show, a location from a second list
@@ -291,7 +333,7 @@ Scope {
 
             // Room for the page, or for an open dialog, up to most of the
             // screen
-            property real fullHeight: Math.min(surface.height - 32 - 60, Math.max(26 + content.wanted + 20, confirm.wanted, input.wanted, picker.wanted, help.wanted))
+            property real fullHeight: Math.min(surface.height - 32 - 60, Math.max(26 + content.wanted + 20, confirm.wanted, input.wanted, picker.wanted, adder.wanted, help.wanted))
 
             // Bottom centre, where the shell's menus open, growing upwards
             anchors.horizontalCenter: parent.horizontalCenter
@@ -413,6 +455,13 @@ Scope {
 
                     PickerDialog {
                         id: picker
+                    }
+
+                    AddDialog {
+                        id: adder
+
+                        returnFocus: keys
+                        folders: menu.folders()
                     }
 
                     InputDialog {
