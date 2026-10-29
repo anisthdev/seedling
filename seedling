@@ -1,0 +1,29 @@
+#!/bin/sh
+# Seedling's menu: `seedling` opens or closes it, `seedling show ID` opens
+# it on that torrent's details (the bar's downloads dropdown does). Starts
+# Seedling first when it isn't running; it opens on starting.
+dir=$(dirname "$(realpath "$0")")
+
+call() {
+    # show is `ipc call seedling details`: qs takes "show" for its own
+    if [ "$1" = show ]; then
+        shift
+        set -- details "$@"
+    fi
+    qs -p "$dir" ipc call seedling "$@" >/dev/null 2>&1
+}
+
+if [ $# -eq 0 ]; then
+    call toggle && exit
+else
+    call "$@" && exit
+fi
+
+setsid -f uwsm app -- qs -n -p "$dir" >/dev/null 2>&1
+[ $# -eq 0 ] && exit
+# Once it answers, what was asked
+for _ in $(seq 50); do
+    sleep 0.1
+    call "$@" && exit
+done
+exit 1

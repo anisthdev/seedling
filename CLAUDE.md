@@ -11,11 +11,14 @@ History: this started as a GTK 4 / libadwaita app in Rust, now in `~/Projects/se
 Seedling is a Quickshell config, separate from quickbar, that shows itself as one of the shell's menus: like the movie search (`quickbar/modules/MediaSearch.qml`), a full-screen overlay `PanelWindow` with a panel at the bottom centre that springs open upwards and folds back down. It stays running while closed (not polling the daemon) and opens on starting.
 
 ```
-qs -p ~/Projects/seedling                          # start (opens)
-qs -p ~/Projects/seedling ipc call seedling toggle  # also open, close
+./seedling            # open or close the menu, starting Seedling (opened) if it isn't running
+./seedling show ID    # open it on that torrent's details (IPC `details`; qs keeps "show" for itself)
+qs -p ~/Projects/seedling ipc call seedling toggle|open|close|details ID
 ```
 
-SUPER+T (`~/.config/hypr/bindings/utilities.lua`) runs `ipc call seedling toggle || uwsm app -- qs -p …`, so it starts Seedling when it isn't running. `q`/Esc on the list, Ctrl+w and a click outside close it.
+SUPER+T (`~/.config/hypr/bindings/utilities.lua`) runs `./seedling`. The bar's downloads dropdown (quickbar's `DownloadHub`, `docs/downloads.md` there) shows unfinished torrents with Seedling's badge and opens `seedling show ID` on a click. `io.github.anisthdev.Seedling.desktop` (symlinked into `~/.local/share/applications`, icon `transmission`) gives that badge and the launcher entry. `q`/Esc on the list, Ctrl+w and a click outside close it.
+
+It opens on starting, but a reload keeps the open/closed state it had (`PersistentProperties` in `Menu.qml`): an open menu takes the keyboard, so it must never pop up by itself.
 
 No build step. Quickshell reloads the running app when a file changes; restart it if a change doesn't show (a failed load can leave it without keyboard focus). Logs go to stdout and `/run/user/1000/quickshell/by-id/*/log.qslog`.
 

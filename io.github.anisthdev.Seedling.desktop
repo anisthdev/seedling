@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Seedling
+GenericName=Torrents
+Comment=Torrents from transmission-daemon, as one of the shell's menus
+Exec=/home/asif/Projects/seedling/seedling
+Icon=transmission
+Categories=Network;FileTransfer;P2P;
+Keywords=torrent;transmission;download;
+StartupNotify=false

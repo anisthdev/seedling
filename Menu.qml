@@ -33,9 +33,52 @@ Scope {
         torrents.stopSearch();
     }
 
+    // A torrent asked for (IPC show) before the list had it
+    property int pendingShow: -1
+
+    function showTorrent(id) {
+        show();
+        pendingShow = id;
+        showPending();
+    }
+
+    function showPending() {
+        const t = Transmission.byId[pendingShow];
+        if (!t)
+            return;
+        pendingShow = -1;
+        torrents.follow(t.id);
+        openDetails(t);
+    }
+
     // Polls the daemon only while open
-    onOpenChanged: Transmission.active = open
-    Component.onCompleted: show()
+    onOpenChanged: {
+        Transmission.active = open;
+        state.wasOpen = open;
+    }
+
+    // Opens on starting, but a reload (a file of ours changed) leaves it as
+    // it was: opening takes the keyboard, so it mustn't pop up by itself.
+    // As the shell's lock screen does.
+    PersistentProperties {
+        id: state
+
+        reloadableId: "seedlingMenu"
+
+        property bool started: false
+        property bool wasOpen: false
+
+        onLoaded: {
+            if (!started) {
+                started = true;
+                menu.show();
+            } else if (wasOpen) {
+                menu.show();
+            } else {
+                Transmission.active = false;
+            }
+        }
+    }
 
     function handleKey(event) {
         if (help.open)
@@ -502,6 +545,12 @@ Scope {
         function close(): void {
             menu.hide();
         }
+
+        // On a torrent's details, from the bar's downloads dropdown (not
+        // "show": `qs ipc show` is qs's own)
+        function details(id: int): void {
+            menu.showTorrent(id);
+        }
     }
 
     Connections {
@@ -517,6 +566,11 @@ Scope {
 
         // The open torrent was removed, here or elsewhere
         function onTorrentsChanged() {
+            if (menu.pendingShow >= 0) {
+                menu.showPending();
+                // Not there once the list is in: gone already
+                menu.pendingShow = -1;
+            }
             if (menu.detailsOpen && !Transmission.byId[Transmission.detailsId])
                 menu.closeDetails();
         }
