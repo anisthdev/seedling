@@ -4,12 +4,17 @@ import "components"
 import "views"
 
 // The app's one window. Keys go to whatever is on top: an open dialog or
-// the key help, else the torrent list, with tremc's bindings.
+// the key help, else the torrent list or a torrent's details, with tremc's
+// bindings.
 FloatingWindow {
     id: window
 
+    readonly property bool detailsOpen: Transmission.detailsId >= 0
+
     // [keys, what they do], for the key help (?)
-    readonly property var bindings: [["j k  ↓ ↑", "Move"], ["Ctrl+f Ctrl+b", "Page down, up"], ["Ctrl+d Ctrl+u", "Half a page down, up"], ["gg G", "First, last torrent"], ["p", "Pause or resume"], ["P", "Pause or resume all"], ["N", "Start now, skipping the queue"], ["v y", "Verify local data"], ["r  Del", "Remove, keeping the files"], ["R  Shift+Del", "Remove and delete the files"], ["?  F1", "These keys"], ["q", "Quit"], ["Ctrl+w", "Quit now"]]
+    readonly property var torrentBindings: [["p", "Pause or resume"], ["P", "Pause or resume all"], ["N", "Start now, skipping the queue"], ["v y", "Verify local data"], ["L", "Seed ratio limit"], ["R  Shift+Del", "Remove and delete the files"]]
+    readonly property var listBindings: [["j k  ↓ ↑", "Move"], ["Ctrl+f Ctrl+b", "Page down, up"], ["Ctrl+d Ctrl+u", "Half a page down, up"], ["gg G", "First, last torrent"], ["Enter l  →", "Details"], ...torrentBindings, ["r  Del", "Remove, keeping the files"], ["?  F1", "These keys"], ["q", "Quit"], ["Ctrl+w", "Quit now"]]
+    readonly property var detailsBindings: [["o f", "Overview, files"], ["Tab Shift+Tab", "Next, previous tab"], ["j k  gg G", "Move, scroll"], ["h l  ← →", "Files: lower, raise priority"], ["", "Overview: previous, next tab"], ["Space", "Select file"], ["a", "Select all files or none"], ...torrentBindings, ["q  Esc  Backspace", "Back to the list"], ["?  F1", "These keys"], ["Ctrl+w", "Quit now"]]
 
     title: "Seedling"
     implicitWidth: 760
@@ -29,6 +34,18 @@ FloatingWindow {
             return help.handleKey(event);
         if (confirm.open)
             return confirm.handleKey(event);
+        if (input.open)
+            return input.handleKey(event);
+        if (event.key === Qt.Key_W && event.modifiers & Qt.ControlModifier) {
+            Qt.quit();
+            return true;
+        }
+        if (event.key === Qt.Key_F1 || event.text === "?") {
+            help.open = true;
+            return true;
+        }
+        if (detailsOpen)
+            return details.handleKey(event) || torrentKey(event, details.torrent);
         return listKey(event);
     }
 
@@ -36,32 +53,47 @@ FloatingWindow {
     // type, so p and P are told apart however Shift was held.
     function listKey(event) {
         const ctrl = event.modifiers & Qt.ControlModifier;
-        const shift = event.modifiers & Qt.ShiftModifier;
-        if (ctrl && event.key === Qt.Key_W) {
-            Qt.quit();
-            return true;
-        }
         if (listKeys.handle(event))
             return true;
 
         const t = torrents.current;
         switch (event.key) {
-        case Qt.Key_F1:
-            help.open = true;
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+        case Qt.Key_Right:
+            openDetails(t);
             return true;
         case Qt.Key_Delete:
-            askRemove(t, shift);
+            if (!(event.modifiers & Qt.ShiftModifier)) {
+                askRemove(t, false);
+                return true;
+            }
+        }
+        if (!ctrl)
+            switch (event.text) {
+            case "q":
+                Qt.quit();
+                return true;
+            case "l":
+                openDetails(t);
+                return true;
+            case "r":
+                askRemove(t, false);
+                return true;
+            }
+        return torrentKey(event, t);
+    }
+
+    // Keys acting on a torrent, the list's current one or the one whose
+    // details are open
+    function torrentKey(event, t) {
+        if (event.key === Qt.Key_Delete && event.modifiers & Qt.ShiftModifier) {
+            askRemove(t, true);
             return true;
         }
-        if (ctrl)
+        if (event.modifiers & Qt.ControlModifier)
             return false;
         switch (event.text) {
-        case "q":
-            Qt.quit();
-            return true;
-        case "?":
-            help.open = true;
-            return true;
         case "p":
             if (t)
                 Transmission.toggle(t);
@@ -78,14 +110,48 @@ FloatingWindow {
             if (t)
                 Transmission.verify([t.id]);
             return true;
-        case "r":
-            askRemove(t, false);
-            return true;
         case "R":
             askRemove(t, true);
             return true;
+        case "L":
+            askSeedRatio(t);
+            return true;
         }
         return false;
+    }
+
+    function openDetails(t) {
+        if (!t)
+            return;
+        details.reset();
+        Transmission.detailsId = t.id;
+    }
+
+    function closeDetails() {
+        Transmission.detailsId = -1;
+    }
+
+    // As tremc's L: a ratio stops seeding there; 0 (or tremc's -1) never
+    // stops; nothing follows the daemon's own limit
+    function askSeedRatio(t) {
+        if (!t)
+            return;
+        const id = t.id;
+        const fallback = Transmission.globalRatioLimit > 0 ? Format.ratio(Transmission.globalRatioLimit) : "unlimited";
+        const current = t.seedRatioMode === 1 ? `${Math.round(t.seedRatioLimit * 100) / 100}` : t.seedRatioMode === 2 ? "0" : "";
+        input.ask("Seed ratio limit", `“${t.name}” stops seeding once it has uploaded this many times its size. 0 seeds without a limit; leave it empty for the default (${fallback}).`, current, "Set", text => {
+            const trimmed = text.trim();
+            if (trimmed === "")
+                return {
+                    value: "default"
+                };
+            const ratio = Number(trimmed);
+            if (isNaN(ratio) || (ratio < 0 && ratio !== -1))
+                return "Enter a ratio, like 2 or 1.5";
+            return {
+                value: ratio <= 0 ? "unlimited" : ratio
+            };
+        }, limit => Transmission.setSeedRatio([id], limit));
     }
 
     function askRemove(t, deleteData) {
@@ -99,6 +165,8 @@ FloatingWindow {
     }
 
     Item {
+        id: keys
+
         anchors.fill: parent
         focus: true
         Keys.onPressed: event => event.accepted = window.handleKey(event)
@@ -118,7 +186,40 @@ FloatingWindow {
                 id: torrents
 
                 anchors.fill: parent
-                visible: Transmission.reachable === true && Transmission.torrents.length > 0
+                visible: opacity > 0 && Transmission.reachable === true && Transmission.torrents.length > 0
+                opacity: window.detailsOpen ? 0 : 1
+                onActivated: window.openDetails(current)
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.animFast
+                    }
+                }
+            }
+
+            // Comes in from the right over the list, and goes back there
+            DetailsView {
+                id: details
+
+                width: parent.width
+                height: parent.height
+                x: window.detailsOpen ? 0 : 32
+                visible: opacity > 0 && Transmission.reachable === true
+                opacity: window.detailsOpen ? 1 : 0
+                onBack: window.closeDetails()
+
+                Behavior on x {
+                    NumberAnimation {
+                        duration: Theme.animNormal
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Theme.emphasizedDecel
+                    }
+                }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.animFast
+                    }
+                }
             }
 
             StatusPage {
@@ -142,10 +243,16 @@ FloatingWindow {
             id: confirm
         }
 
+        InputDialog {
+            id: input
+
+            returnFocus: keys
+        }
+
         KeyHelp {
             id: help
 
-            bindings: window.bindings
+            bindings: window.detailsOpen ? window.detailsBindings : window.listBindings
         }
 
         ListKeys {
@@ -165,6 +272,12 @@ FloatingWindow {
 
         function onRemoved(message) {
             snackbar.show(message);
+        }
+
+        // The open torrent was removed, here or elsewhere
+        function onTorrentsChanged() {
+            if (window.detailsOpen && !Transmission.byId[Transmission.detailsId])
+                window.closeDetails();
         }
     }
 }

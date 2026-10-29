@@ -42,6 +42,18 @@ Singleton {
 
     readonly property var fields: ["id", "name", "status", "error", "errorString", "percentDone", "recheckProgress", "rateDownload", "rateUpload", "eta", "uploadRatio", "sizeWhenDone", "leftUntilDone", "uploadedEver", "seedRatioMode", "seedRatioLimit", "trackerStats"]
 
+    // The torrent the details view shows (-1 for none), and everything
+    // about it: the list's fields, these, its files and theirs
+    property int detailsId: -1
+    property var details: null
+    readonly property var detailFields: fields.concat(["hashString", "totalSize", "haveValid", "downloadedEver", "corruptEver", "pieceCount", "pieceSize", "downloadDir", "addedDate", "doneDate", "dateCreated", "secondsSeeding", "secondsDownloading", "peersConnected", "peersSendingToUs", "peersGettingFromUs", "isPrivate", "comment", "creator", "files", "fileStats"])
+
+    onDetailsIdChanged: {
+        details = null;
+        if (detailsId >= 0)
+            refreshDetails();
+    }
+
     // One request. `done` gets the reply's arguments, `fail` a message.
     function rpc(method, args, done, fail, retried) {
         const xhr = new XMLHttpRequest();
@@ -96,11 +108,26 @@ Singleton {
             reachable = false;
             problem = message;
         });
+        refreshDetails();
         if (polls % sessionEvery === 0)
             rpc("session-get", {
                 fields: ["seedRatioLimit", "seedRatioLimited"]
             }, args => globalRatioLimit = args.seedRatioLimited ? args.seedRatioLimit : -1);
         polls++;
+    }
+
+    function refreshDetails() {
+        if (detailsId < 0)
+            return;
+        const id = detailsId;
+        const sent = Date.now();
+        rpc("torrent-get", {
+            ids: [id],
+            fields: detailFields
+        }, args => {
+            if (id === detailsId && (!details || sent >= changedAt + settleTime))
+                details = args.torrents[0] ?? null;
+        });
     }
 
     function setTorrents(list) {
@@ -118,6 +145,8 @@ Singleton {
             return;
         const updated = Object.assign({}, t, changes);
         setTorrents(torrents.map(other => other.id === id ? updated : other));
+        if (details?.id === id)
+            details = Object.assign({}, details, changes);
         changedAt = Date.now();
     }
 
@@ -174,6 +203,82 @@ Singleton {
             stop(torrents.filter(t => t.status !== 0).map(t => t.id));
         else
             start(torrents.map(t => t.id));
+    }
+
+    // Priority levels of a file: -2 skipped (not wanted), else the
+    // daemon's -1 low, 0 normal, 1 high
+    function fileLevel(stats) {
+        return stats.wanted ? stats.priority : -2;
+    }
+
+    // Sets files of the details' torrent (indexes into `files`) to a level.
+    // An empty list is never sent: it would mean every file.
+    function setFileLevel(indexes, level) {
+        const t = details;
+        if (!t || indexes.length === 0)
+            return;
+        const args = {
+            ids: [t.id]
+        };
+        if (level === -2)
+            args["files-unwanted"] = indexes;
+        else {
+            args["files-wanted"] = indexes;
+            args[["priority-low", "priority-normal", "priority-high"][level + 1]] = indexes;
+        }
+        rpc("torrent-set", args, null, message => failed(`Couldn’t change the files’ priority: ${message}`));
+        const stats = t.fileStats.slice();
+        for (const i of indexes)
+            stats[i] = Object.assign({}, stats[i], level === -2 ? {
+                wanted: false
+            } : {
+                wanted: true,
+                priority: level
+            });
+        details = Object.assign({}, t, {
+            fileStats: stats
+        });
+        changedAt = Date.now();
+    }
+
+    // As tremc's h and l: one step from the lowest of the files up, or from
+    // the highest down, for all of them (skip < low < normal < high)
+    function stepFiles(indexes, by) {
+        if (!details || indexes.length === 0)
+            return;
+        const levels = indexes.map(i => fileLevel(details.fileStats[i]));
+        const from = by > 0 ? Math.min(...levels) : Math.max(...levels);
+        const to = Math.max(-2, Math.min(1, from + by));
+        if (to !== from)
+            setFileLevel(indexes, to);
+    }
+
+    // The seed ratio limit: a number >= 0 stops seeding there, "unlimited"
+    // never stops, "default" follows the daemon's own limit
+    function setSeedRatio(ids, limit) {
+        if (ids.length === 0)
+            return;
+        const args = {
+            ids: ids
+        };
+        let changes;
+        if (limit === "default")
+            changes = {
+                seedRatioMode: 0
+            };
+        else if (limit === "unlimited")
+            changes = {
+                seedRatioMode: 2
+            };
+        else
+            changes = {
+                seedRatioMode: 1,
+                seedRatioLimit: limit
+            };
+        Object.assign(args, changes);
+        rpc("torrent-set", args, null, message => failed(`Couldn’t set the seed ratio limit: ${message}`));
+        for (const id of ids)
+            assume(id, changes);
     }
 
     function remove(id, deleteData) {

@@ -26,8 +26,8 @@ AppWindow.qml       # the window; key dispatch (overlays first, then the current
 Theme.qml           # singleton: matugen palette, fonts, radii, motion (copied from quickbar)
 Transmission.qml    # singleton: RPC, polling, torrents/byId, commands
 Format.qml          # singleton: what a torrent shows (sizes, status text, progress, colours)
-components/         # generic widgets; Label, Icon, IconButton, LinearProgress, ListKeys copied from quickbar
-views/              # app screens: TorrentList, TorrentRow, StatusPage
+components/         # generic widgets (dialogs, snackbar, key help); Label, Icon, IconButton, LinearProgress, ListKeys copied from quickbar
+views/              # app screens: TorrentList/TorrentRow, DetailsView (Overview, FileList/FileRow), StatusPage
 icons/              # Material Symbols SVGs (white), copied from quickbar/icons as needed
 ```
 
@@ -39,10 +39,10 @@ Everything must be doable from the keyboard, with tremc's bindings (`/usr/bin/tr
 
 - Keys are handled in one place per view (`AppWindow.handleKey` → overlay or view). Match letters on `event.text` (so `p` and `P` differ), special keys on `event.key`.
 - An open dialog or overlay takes every key until it closes. Dialogs answer tremc style: `y`/Enter yes, `n`/`q`/Esc no.
-- `?`/F1 shows every key of the current view; keep `AppWindow.bindings` in sync when adding keys.
+- `?`/F1 shows every key of the current view; keep `AppWindow.listBindings`/`detailsBindings` (and the shared `torrentBindings`) in sync when adding keys.
 - No focus rings (user's choice): the keyboard's current row is shown by its fill (`secondary_container`, all corners rounded).
 
-Implemented: list movement (`j k`, arrows, `gg G`, Home/End, Ctrl+f/b, PgUp/PgDn, Ctrl+d/u, Ctrl+n/p), `p` `P` `N` `v`/`y` `r`/Del `R`/Shift+Del, `?`/F1, `q`, Ctrl+w.
+Implemented: list movement (`j k`, arrows, `gg G`, Home/End, Ctrl+f/b, PgUp/PgDn, Ctrl+d/u, Ctrl+n/p), `p` `P` `N` `v`/`y` `r`/Del `R`/Shift+Del `L`, `?`/F1, `q`, Ctrl+w. Details (Enter/`l`/Right or double-click; back `q`/Esc/Backspace): `o` `f` Tab/Shift+Tab; overview scrolls with the list keys, `h`/`l` switch tabs; files: list movement, `h`/`l` priority (selection, else current; tremc's stepping from the lowest/highest), Space, `a`, Esc drops the selection; `p` `P` `N` `v` `L` `R` act on the open torrent.
 
 ## Design
 
@@ -71,17 +71,17 @@ Reference: Transmission's `docs/rpc-spec.md`. Check it when unsure of a field na
 No automated UI tests. Test against a real daemon:
 
 - The user's own daemon only for **looking** (opening the app, moving the cursor). Never pause, verify, remove or change their torrents.
-- Actions in a throwaway daemon in a private network namespace (`unshare -rn`), with small locally created torrents (`transmission-create`); there `localhost:9091` is the sandbox's daemon.
+- Actions in a throwaway daemon in a private network namespace, with small locally created torrents (`transmission-create`); there `localhost:9091` is the sandbox's daemon. What works: `unshare -rn sh -c 'ip link set lo up && exec unshare --map-user=1000 --map-group=1000 inner.sh'` (the nested map lets Qt reach the Wayland socket), where `inner.sh` starts `transmission-daemon -g <dir> -w <data>`, adds the torrents and `exec`s `qs -p`. Stop your own Seedling first (two windows share the class). Check results with `nsenter -t <qs pid> -U -n --preserve-credentials transmission-remote 9091 …`. Clean up by pid: `pkill -f <pattern>` matches the shell running it.
 - Run the app visibly on the user's screen (they like to watch). Send keys only to Seedling's window: `hyprctl dispatch 'hl.dsp.send_shortcut({ mods = "", key = "j", window = "class:io.github.anisthdev.Seedling" })'`. `?` is `key = "slash"` with `SHIFT`. Popups need real focus; if you give Seedling focus with `hl.dsp.focus`, hand it back afterwards.
 
 ## Plan
 
 1. **Torrent list** with tremc's list keys, pause/resume, start now, verify, remove (with confirm and delete-data), unreachable/empty states, key help. *(done)*
-2. **Details view** (Enter/`l`/Right, back with `q`/Backspace/Esc): tabs by `o` overview, `f` files, Tab/Shift+Tab. Files: `j k`, `h`/`l` lower/raise priority (off < low < normal < high, where off = skip), Space select, `a` select all, `L` seed ratio limit.
+2. **Details view** (Enter/`l`/Right, back with `q`/Backspace/Esc): tabs by `o` overview, `f` files, Tab/Shift+Tab. Files: `j k`, `h`/`l` lower/raise priority (off < low < normal < high, where off = skip), Space select, `a` select all, `L` seed ratio limit. *(done)*
 3. **Find, filter, sort, select**: `/`, `f`, `s`, Space/`A`/`i` on the list, commands on selections.
 4. **Add and move**: `a` add (magnet, `.torrent` file, download dir), `m` move data.
 5. **Polish**: `.desktop` file and launcher, `magnet:`/`.torrent` handler, notifications, queue order (`J`/`K`), speed limits.
 
 Later maybe: peers and trackers tabs (`e`, `t`), labels, profiles.
 
-Current stage: **2**.
+Current stage: **3**.

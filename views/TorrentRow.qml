@@ -17,6 +17,8 @@ Item {
     readonly property alias hovered: mouse.containsMouse
 
     signal clicked
+    // Double-clicked: open its details
+    signal activated
 
     readonly property string kind: torrent ? Format.kind(torrent) : "download"
     readonly property color textColor: current ? Theme.on_secondary_container : Theme.on_surface
@@ -31,6 +33,7 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         onClicked: row.clicked()
+        onDoubleClicked: row.activated()
     }
 
     Column {
@@ -55,18 +58,8 @@ Item {
             width: parent.width
             thickness: 4
             progress: row.torrent ? Format.progress(row.torrent) : 0
-            color: ({
-                    download: Theme.primary,
-                    upload: Theme.tertiary,
-                    paused: Theme.outline,
-                    error: Theme.error
-                })[row.kind]
-            trackColor: ({
-                    download: Theme.primary_container,
-                    upload: Theme.tertiary_container,
-                    paused: Theme.surface_container_highest,
-                    error: Qt.alpha(Theme.error, 0.24)
-                })[row.kind]
+            color: Format.barColor(row.kind)
+            trackColor: Format.trackColor(row.kind)
         }
 
         Item {

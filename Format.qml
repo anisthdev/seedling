@@ -99,6 +99,25 @@ Singleton {
         return uploadPhase(t) ? "upload" : "download";
     }
 
+    // A progress bar's colours, by kind
+    function barColor(kind) {
+        return ({
+                download: Theme.primary,
+                upload: Theme.tertiary,
+                paused: Theme.outline,
+                error: Theme.error
+            })[kind];
+    }
+
+    function trackColor(kind) {
+        return ({
+                download: Theme.primary_container,
+                upload: Theme.tertiary_container,
+                paused: Theme.surface_container_highest,
+                error: Qt.alpha(Theme.error, 0.24)
+            })[kind];
+    }
+
     // What it's doing: "Downloading · 1.2 GB of 4.0 GB · ↓ 1.2 MB/s · 2 min left"
     function statusText(t) {
         if (hasError(t))
@@ -132,5 +151,53 @@ Singleton {
 
     function leechers(t) {
         return Math.max(-1, ...(t.trackerStats ?? []).map(s => s.leecherCount));
+    }
+
+    // A date from the daemon (seconds since 1970), or "–" for none
+    function date(seconds) {
+        return seconds > 0 ? Qt.formatDateTime(new Date(seconds * 1000), "d MMM yyyy, HH:mm") : "–";
+    }
+
+    // A long span, to the two largest units: "3 d 4 h", "12 min"
+    function duration(seconds) {
+        if (seconds < 60)
+            return seconds > 0 ? "less than a minute" : "–";
+        const units = [[86400, "d"], [3600, "h"], [60, "min"]];
+        const parts = [];
+        let left = seconds;
+        for (const [length, name] of units) {
+            if (left >= length || parts.length > 0) {
+                parts.push(`${Math.floor(left / length)} ${name}`);
+                left %= length;
+            }
+            if (parts.length === 2)
+                break;
+        }
+        return parts.filter(p => !p.startsWith("0 ")).join(" ");
+    }
+
+    function percent(fraction) {
+        return `${Math.floor(fraction * 1000) / 10}%`;
+    }
+
+    // What seedRatioMode means for this torrent
+    function ratioLimitText(t) {
+        switch (t.seedRatioMode) {
+        case 0:
+            return Transmission.globalRatioLimit > 0 ? `Default (${ratio(Transmission.globalRatioLimit)})` : "Default (unlimited)";
+        case 1:
+            return ratio(t.seedRatioLimit);
+        }
+        return "Unlimited";
+    }
+
+    // A file's priority level (see Transmission.fileLevel)
+    function priority(level) {
+        return ({
+                "-2": "Skip",
+                "-1": "Low",
+                "0": "Normal",
+                "1": "High"
+            })[level] ?? "";
     }
 }

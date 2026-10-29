@@ -12,6 +12,9 @@ Item {
     property alias view: list
     readonly property var current: Transmission.byId[Transmission.ids[list.currentIndex]] ?? null
 
+    // A row was double-clicked (it's current by then)
+    signal activated
+
     // The launcher's title
     Label {
         id: title
@@ -77,6 +80,10 @@ Item {
 
             current: ListView.isCurrentItem
             onClicked: list.currentIndex = index
+            onActivated: {
+                list.currentIndex = index;
+                root.activated();
+            }
 
             // The row's background, moved under the sliding fill. The
             // current row's is hidden, so the fill's round corners show.
