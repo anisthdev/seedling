@@ -4,8 +4,9 @@ import "../components"
 
 // One torrent in the list, as a row of the launcher's grouped list: its
 // name, progress, what it's doing, then its swarm and ratio on the right,
-// and pause or resume. The list draws its background and the sliding fill
-// of the current row; there are no focus rings.
+// and pause or resume. While torrents are selected, each row shows a check
+// box. The list draws its background and the sliding fill of the current
+// row; there are no focus rings.
 Item {
     id: row
 
@@ -14,11 +15,15 @@ Item {
     required property int index
     readonly property var torrent: Transmission.byId[modelData] ?? null
     property bool current: false
+    property bool selecting: false
+    property bool selected: false
     readonly property alias hovered: mouse.containsMouse
 
     signal clicked
     // Double-clicked: open its details
     signal activated
+    // Its check box was clicked
+    signal toggled
 
     readonly property string kind: torrent ? Format.kind(torrent) : "download"
     readonly property color textColor: current ? Theme.on_secondary_container : Theme.on_surface
@@ -36,13 +41,43 @@ Item {
         onDoubleClicked: row.activated()
     }
 
+    // Check box, while selecting
+    Item {
+        id: check
+
+        x: 14
+        width: row.selecting ? 24 : 0
+        height: parent.height
+        clip: true
+
+        Behavior on width {
+            NumberAnimation {
+                duration: Theme.animFast
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Theme.emphasizedDecel
+            }
+        }
+
+        Icon {
+            name: row.selected ? "check_box" : "check_box_outline_blank"
+            size: 20
+            color: row.selected ? (row.current ? Theme.on_secondary_container : Theme.primary) : row.detailColor
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: row.toggled()
+        }
+    }
+
     Column {
         id: info
 
-        // The launcher's text inset
-        x: 18
+        // The launcher's text inset, or room for the check box
+        x: row.selecting ? check.x + check.width + 10 : 18
         y: 14
-        width: parent.width - 18 - 16 - button.width
+        width: parent.width - x - 16 - button.width
         spacing: 4
 
         Label {
@@ -124,7 +159,7 @@ Item {
         iconSize: 18
         color: row.detailColor
         onClicked: if (row.torrent)
-            Transmission.toggle(row.torrent)
+            Transmission.toggle([row.torrent])
     }
 
     component SwarmCount: Row {

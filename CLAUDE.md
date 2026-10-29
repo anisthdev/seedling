@@ -29,7 +29,7 @@ Menu.qml            # the menu: layer surface, panel, open/close, IPC; key dispa
 Theme.qml           # singleton: matugen palette, fonts, radii, motion (copied from quickbar)
 Transmission.qml    # singleton: RPC, polling, torrents/byId, commands
 Format.qml          # singleton: what a torrent shows (sizes, status text, progress, colours)
-components/         # generic widgets (dialogs, snackbar, key help); Label, Icon, IconButton, LinearProgress, ListKeys copied from quickbar
+components/         # generic widgets (confirm, input and picker dialogs, snackbar, key help); Label, Icon, IconButton, LinearProgress, ListKeys copied from quickbar
 views/              # app screens: TorrentList/TorrentRow, DetailsView (Overview, FileList/FileRow), StatusPage
 icons/              # Material Symbols SVGs (white), copied from quickbar/icons as needed
 ```
@@ -45,7 +45,7 @@ Everything must be doable from the keyboard, with tremc's bindings (`/usr/bin/tr
 - `?`/F1 shows every key of the current view; keep `Menu.listBindings`/`detailsBindings` (and the shared `torrentBindings`) in sync when adding keys.
 - No focus rings (user's choice): the keyboard's current row is shown by its fill (`secondary_container`, all corners rounded).
 
-Implemented: list movement (`j k`, arrows, `gg G`, Home/End, Ctrl+f/b, PgUp/PgDn, Ctrl+d/u, Ctrl+n/p), `p` `P` `N` `v`/`y` `r`/Del `R`/Shift+Del `L`, `?`/F1, `q`, Ctrl+w. Details (Enter/`l`/Right or double-click; back `q`/Esc/Backspace): `o` `f` Tab/Shift+Tab; overview (a summary, Space shows more details) scrolls with the list keys, `h`/`l` switch tabs; files: list movement, `h`/`l` priority (selection, else current; tremc's stepping from the lowest/highest), Space, `a`, Esc drops the selection; `p` `P` `N` `v` `L` `R` act on the open torrent.
+Implemented: list movement (`j k`, arrows, `gg G`, Home/End, Ctrl+f/b, PgUp/PgDn, Ctrl+d/u, Ctrl+n/p), `p` `P` `N` `v`/`y` `r`/Del `R`/Shift+Del `L`, `?`/F1, `q`, Ctrl+w. Find `/` (the launcher's field: narrows by name; Enter/Esc give the keys back, Down/Tab/Ctrl+j/n move), filter `f` and sort `s` (a `PickerDialog` with tremc's options and letters; the pick follows its torrent as the order changes), select Space (and move down) `A` `i`. `p` `N` `v` `L` `r` act on the selection (of what's shown) else the current torrent; `R` on the current one only, as tremc; `P` on all shown. Esc lets go of the selection, then the search, then closes. Details (Enter/`l`/Right or double-click; back `q`/Esc/Backspace): `o` `f` Tab/Shift+Tab; overview (a summary, Space shows more details) scrolls with the list keys, `h`/`l` switch tabs; files: list movement, `h`/`l` priority (selection, else current; tremc's stepping from the lowest/highest), Space, `a`, Esc drops the selection; `p` `P` `N` `v` `L` `R` act on the open torrent.
 
 ## Design
 
@@ -81,10 +81,10 @@ No automated UI tests. Test against a real daemon:
 
 1. **Torrent list** with tremc's list keys, pause/resume, start now, verify, remove (with confirm and delete-data), unreachable/empty states, key help. *(done)*
 2. **Details view** (Enter/`l`/Right, back with `q`/Backspace/Esc): tabs by `o` overview, `f` files, Tab/Shift+Tab. Files: `j k`, `h`/`l` lower/raise priority (off < low < normal < high, where off = skip), Space select, `a` select all, `L` seed ratio limit. *(done)*
-3. **Find, filter, sort, select**: `/`, `f`, `s`, Space/`A`/`i` on the list, commands on selections.
+3. **Find, filter, sort, select**: `/`, `f`, `s`, Space/`A`/`i` on the list, commands on selections. *(done)*
 4. **Add and move**: `a` add (magnet, `.torrent` file, download dir), `m` move data.
 5. **Polish**: `.desktop` file and launcher, `magnet:`/`.torrent` handler, notifications, queue order (`J`/`K`), speed limits.
 
 Later maybe: peers and trackers tabs (`e`, `t`), labels, profiles.
 
-Current stage: **3**.
+Current stage: **4**.

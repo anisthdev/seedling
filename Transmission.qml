@@ -43,13 +43,13 @@ Singleton {
     signal failed(string message)
     signal removed(string message)
 
-    readonly property var fields: ["id", "name", "status", "error", "errorString", "percentDone", "recheckProgress", "rateDownload", "rateUpload", "eta", "uploadRatio", "sizeWhenDone", "leftUntilDone", "uploadedEver", "seedRatioMode", "seedRatioLimit", "trackerStats"]
+    readonly property var fields: ["id", "name", "status", "error", "errorString", "percentDone", "recheckProgress", "rateDownload", "rateUpload", "eta", "uploadRatio", "sizeWhenDone", "leftUntilDone", "uploadedEver", "seedRatioMode", "seedRatioLimit", "trackerStats", "addedDate", "activityDate", "doneDate", "queuePosition", "downloadDir", "totalSize", "peersConnected", "peersGettingFromUs", "peersSendingToUs", "isPrivate"]
 
     // The torrent the details view shows (-1 for none), and everything
     // about it: the list's fields, these, its files and theirs
     property int detailsId: -1
     property var details: null
-    readonly property var detailFields: fields.concat(["hashString", "totalSize", "haveValid", "downloadedEver", "corruptEver", "pieceCount", "pieceSize", "downloadDir", "addedDate", "doneDate", "dateCreated", "secondsSeeding", "secondsDownloading", "peersConnected", "peersSendingToUs", "peersGettingFromUs", "isPrivate", "comment", "creator", "files", "fileStats"])
+    readonly property var detailFields: fields.concat(["hashString", "haveValid", "downloadedEver", "corruptEver", "pieceCount", "pieceSize", "dateCreated", "secondsSeeding", "secondsDownloading", "comment", "creator", "files", "fileStats"])
 
     onDetailsIdChanged: {
         details = null;
@@ -192,20 +192,21 @@ Singleton {
                 }));
     }
 
-    // Pause a running torrent, resume a paused one
-    function toggle(t) {
-        if (t.status === 0)
-            start([t.id]);
+    // As tremc's p: resume them if any is paused, else pause them all
+    function toggle(list) {
+        if (list.some(t => t.status === 0))
+            start(list.filter(t => t.status === 0).map(t => t.id));
         else
-            stop([t.id]);
+            stop(list.map(t => t.id));
     }
 
-    // As tremc's P: pause everything if anything runs, else resume all
-    function toggleAll() {
-        if (torrents.some(t => t.status !== 0))
-            stop(torrents.filter(t => t.status !== 0).map(t => t.id));
+    // As tremc's P, for the torrents shown: pause them if any runs, else
+    // resume them all
+    function toggleAll(list) {
+        if (list.some(t => t.status !== 0))
+            stop(list.filter(t => t.status !== 0).map(t => t.id));
         else
-            start(torrents.map(t => t.id));
+            start(list.map(t => t.id));
     }
 
     // Priority levels of a file: -2 skipped (not wanted), else the
@@ -284,18 +285,20 @@ Singleton {
             assume(id, changes);
     }
 
-    function remove(id, deleteData) {
-        const t = byId[id];
-        if (!t)
+    // Never with no ids: the daemon would remove every torrent
+    function remove(ids, deleteData) {
+        const gone = ids.map(id => byId[id]).filter(t => t);
+        if (gone.length === 0)
             return;
+        const what = gone.length === 1 ? `“${gone[0].name}”` : `${gone.length} torrents`;
         rpc("torrent-remove", {
-            ids: [id],
+            ids: gone.map(t => t.id),
             "delete-local-data": deleteData
         }, () => {
             changedAt = Date.now();
-            setTorrents(torrents.filter(other => other.id !== id));
-            removed(deleteData ? `Removed “${t.name}” and deleted its files` : `Removed “${t.name}”`);
-        }, message => failed(`Couldn’t remove “${t.name}”: ${message}`));
+            setTorrents(torrents.filter(other => !gone.includes(other)));
+            removed(deleteData ? `Removed ${what} and deleted the files` : `Removed ${what}`);
+        }, message => failed(`Couldn’t remove ${what}: ${message}`));
     }
 
     Timer {

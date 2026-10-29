@@ -19,8 +19,8 @@ Scope {
     readonly property bool detailsOpen: Transmission.detailsId >= 0
 
     // [keys, what they do], for the key help (?)
-    readonly property var torrentBindings: [["p", "Pause or resume"], ["P", "Pause or resume all"], ["N", "Start now, skipping the queue"], ["v y", "Verify local data"], ["L", "Seed ratio limit"], ["R  Shift+Del", "Remove and delete the files"]]
-    readonly property var listBindings: [["j k  ↓ ↑", "Move"], ["Ctrl+f Ctrl+b", "Page down, up"], ["Ctrl+d Ctrl+u", "Half a page down, up"], ["gg G", "First, last torrent"], ["Enter l  →", "Details"], ...torrentBindings, ["r  Del", "Remove, keeping the files"], ["?  F1", "These keys"], ["q  Esc", "Close"], ["Ctrl+w", "Close"]]
+    readonly property var torrentBindings: [["p", "Pause or resume"], ["P", "Pause or resume all shown"], ["N", "Start now, skipping the queue"], ["v y", "Verify local data"], ["L", "Seed ratio limit"], ["R  Shift+Del", "Remove one, deleting its files"]]
+    readonly property var listBindings: [["j k  ↓ ↑", "Move"], ["Ctrl+f Ctrl+b", "Page down, up"], ["Ctrl+d Ctrl+u", "Half a page down, up"], ["gg G", "First, last torrent"], ["Enter l  →", "Details"], ["/", "Find by name"], ["f", "Filter"], ["s", "Sort"], ["Space", "Select, and move down"], ["A", "Select all or none"], ["i", "Invert the selection"], ["", "The rest act on the selection, else the current one:"], ...torrentBindings, ["r  Del", "Remove, keeping the files"], ["?  F1", "These keys"], ["Esc", "Drop the selection, the search, then close"], ["q  Ctrl+w", "Close"]]
     readonly property var detailsBindings: [["o f", "Overview, files"], ["Tab Shift+Tab", "Next, previous tab"], ["j k  gg G", "Move, scroll"], ["h l  ← →", "Files: lower, raise priority"], ["", "Overview: previous, next tab"], ["Space", "Files: select; overview: more details"], ["a", "Select all files or none"], ...torrentBindings, ["q  Esc  Backspace", "Back to the list"], ["?  F1", "These keys"], ["Ctrl+w", "Close"]]
 
     function show() {
@@ -30,6 +30,7 @@ Scope {
 
     function hide() {
         open = false;
+        torrents.stopSearch();
     }
 
     // Polls the daemon only while open
@@ -43,6 +44,8 @@ Scope {
             return confirm.handleKey(event);
         if (input.open)
             return input.handleKey(event);
+        if (picker.open)
+            return picker.handleKey(event);
         if (event.key === Qt.Key_W && event.modifiers & Qt.ControlModifier) {
             hide();
             return true;
@@ -52,7 +55,7 @@ Scope {
             return true;
         }
         if (detailsOpen)
-            return details.handleKey(event) || torrentKey(event, details.torrent);
+            return details.handleKey(event) || torrentKey(event, details.torrent ? [details.torrent] : [], details.torrent);
         return listKey(event);
     }
 
@@ -70,12 +73,22 @@ Scope {
         case Qt.Key_Right:
             openDetails(t);
             return true;
+        // Lets go of one thing at a time: the selection, the search, then
+        // the menu
         case Qt.Key_Escape:
-            hide();
+            if (torrents.selectedIds.length > 0)
+                torrents.clearSelection();
+            else if (torrents.query !== "")
+                torrents.clearSearch();
+            else
+                hide();
+            return true;
+        case Qt.Key_Space:
+            torrents.toggleCurrent();
             return true;
         case Qt.Key_Delete:
             if (!(event.modifiers & Qt.ShiftModifier)) {
-                askRemove(t, false);
+                askRemove(torrents.targets(), false);
                 return true;
             }
         }
@@ -88,46 +101,70 @@ Scope {
                 openDetails(t);
                 return true;
             case "r":
-                askRemove(t, false);
+                askRemove(torrents.targets(), false);
+                return true;
+            case "/":
+                torrents.startSearch();
+                return true;
+            case "f":
+                askFilter();
+                return true;
+            case "s":
+                picker.ask("Sort by", torrents.sortEntries(), e => torrents.setSort(e.id));
+                return true;
+            case "A":
+                torrents.selectAll();
+                return true;
+            case "i":
+                torrents.invertSelection();
                 return true;
             }
-        return torrentKey(event, t);
+        return torrentKey(event, torrents.targets(), t);
     }
 
-    // Keys acting on a torrent, the list's current one or the one whose
-    // details are open
-    function torrentKey(event, t) {
+    // Keys acting on torrents: `list` is what most act on (the list's
+    // selection, else its current torrent; or the one whose details are
+    // open), `t` the current one alone, for R as in tremc
+    function torrentKey(event, list, t) {
         if (event.key === Qt.Key_Delete && event.modifiers & Qt.ShiftModifier) {
-            askRemove(t, true);
+            askRemove(t ? [t] : [], true);
             return true;
         }
         if (event.modifiers & Qt.ControlModifier)
             return false;
+        const ids = list.map(t => t.id);
         switch (event.text) {
         case "p":
-            if (t)
-                Transmission.toggle(t);
+            Transmission.toggle(list);
             return true;
         case "P":
-            Transmission.toggleAll();
+            Transmission.toggleAll(torrents.shown);
             return true;
         case "N":
-            if (t)
-                Transmission.startNow([t.id]);
+            Transmission.startNow(ids);
             return true;
         case "v":
         case "y":
-            if (t)
-                Transmission.verify([t.id]);
+            Transmission.verify(ids);
             return true;
         case "R":
-            askRemove(t, true);
+            askRemove(t ? [t] : [], true);
             return true;
         case "L":
-            askSeedRatio(t);
+            askSeedRatio(list);
             return true;
         }
         return false;
+    }
+
+    // As tremc's f: what to show, a location from a second list
+    function askFilter() {
+        picker.ask("Show only", torrents.filterEntries(), e => {
+            if (e.id === "location")
+                Qt.callLater(() => picker.ask("Location", torrents.locationEntries(), d => torrents.setFilter("location", d.id)));
+            else
+                torrents.setFilter(e.id);
+        });
     }
 
     function openDetails(t) {
@@ -141,15 +178,22 @@ Scope {
         Transmission.detailsId = -1;
     }
 
+    // How a dialog names the torrents it's about
+    function describe(list) {
+        return list.length === 1 ? `“${list[0].name}”` : `These ${list.length} torrents`;
+    }
+
     // As tremc's L: a ratio stops seeding there; 0 (or tremc's -1) never
-    // stops; nothing follows the daemon's own limit
-    function askSeedRatio(t) {
-        if (!t)
+    // stops; nothing follows the daemon's own limit. Starts from the first
+    // one's limit.
+    function askSeedRatio(list) {
+        if (list.length === 0)
             return;
-        const id = t.id;
+        const ids = list.map(t => t.id);
+        const t = list[0];
         const fallback = Transmission.globalRatioLimit > 0 ? Format.ratio(Transmission.globalRatioLimit) : "unlimited";
         const current = t.seedRatioMode === 1 ? `${Math.round(t.seedRatioLimit * 100) / 100}` : t.seedRatioMode === 2 ? "0" : "";
-        input.ask("Seed ratio limit", `“${t.name}” stops seeding once it has uploaded this many times its size. 0 seeds without a limit; leave it empty for the default (${fallback}).`, current, "Set", text => {
+        input.ask("Seed ratio limit", `${describe(list)} ${list.length === 1 ? "stops" : "stop"} seeding once uploaded this many times ${list.length === 1 ? "its" : "their"} size. 0 seeds without a limit; leave it empty for the default (${fallback}).`, current, "Set", text => {
             const trimmed = text.trim();
             if (trimmed === "")
                 return {
@@ -161,18 +205,21 @@ Scope {
             return {
                 value: ratio <= 0 ? "unlimited" : ratio
             };
-        }, limit => Transmission.setSeedRatio([id], limit));
+        }, limit => Transmission.setSeedRatio(ids, limit));
     }
 
-    function askRemove(t, deleteData) {
-        if (!t)
+    function askRemove(list, deleteData) {
+        if (list.length === 0)
             return;
-        const id = t.id;
+        const ids = list.map(t => t.id);
+        const what = describe(list);
+        const many = list.length > 1;
         if (deleteData)
-            confirm.ask("Delete torrent and files?", `“${t.name}” will be removed and its downloaded files deleted.`, "Delete", () => Transmission.remove(id, true));
+            confirm.ask(many ? `Delete ${list.length} torrents and files?` : "Delete torrent and files?", `${what} will be removed and ${many ? "their" : "its"} downloaded files deleted.`, "Delete", () => Transmission.remove(ids, true));
         else
-            confirm.ask("Remove torrent?", `“${t.name}” will be removed from the list. Its files stay where they are.`, "Remove", () => Transmission.remove(id, false));
+            confirm.ask(many ? `Remove ${list.length} torrents?` : "Remove torrent?", `${what} will be removed from the list. ${many ? "Their" : "Its"} files stay where they are.`, "Remove", () => Transmission.remove(ids, false));
     }
+
 
     PanelWindow {
         id: surface
@@ -244,7 +291,7 @@ Scope {
 
             // Room for the page, or for an open dialog, up to most of the
             // screen
-            property real fullHeight: Math.min(surface.height - 32 - 60, Math.max(26 + content.wanted + 20, confirm.wanted, input.wanted, help.wanted))
+            property real fullHeight: Math.min(surface.height - 32 - 60, Math.max(26 + content.wanted + 20, confirm.wanted, input.wanted, picker.wanted, help.wanted))
 
             // Bottom centre, where the shell's menus open, growing upwards
             anchors.horizontalCenter: parent.horizontalCenter
@@ -256,6 +303,8 @@ Scope {
             color: Theme.surface_container
             clip: true
 
+            // The same pace as the search field's (TorrentList), which
+            // grows alongside it
             Behavior on fullHeight {
                 enabled: menu.open && !openAnim.running
                 NumberAnimation {
@@ -304,7 +353,10 @@ Scope {
                             anchors.fill: parent
                             visible: opacity > 0 && Transmission.reachable === true && Transmission.torrents.length > 0
                             opacity: menu.detailsOpen ? 0 : 1
+                            returnFocus: keys
                             onActivated: menu.openDetails(current)
+                            onSortClicked: picker.ask("Sort by", sortEntries(), e => setSort(e.id))
+                            onFilterClicked: menu.askFilter()
 
                             Behavior on opacity {
                                 NumberAnimation {
@@ -357,6 +409,10 @@ Scope {
 
                     ConfirmDialog {
                         id: confirm
+                    }
+
+                    PickerDialog {
+                        id: picker
                     }
 
                     InputDialog {
