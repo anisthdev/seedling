@@ -1,10 +1,14 @@
 # Maintainer: Asif Arbaj <asifarbaj@gmail.com>
-pkgname=seedling
+_name=seedling
+pkgname=totoro-seedling
 pkgver=r0
 pkgrel=1
 pkgdesc="Keyboard-driven transmission-daemon client, a Quickshell menu (qs -c seedling)"
 arch=('any')
 url="https://github.com/anisthdev/seedling"
+provides=('seedling')
+conflicts=('seedling')
+replaces=('seedling')
 license=('unknown')
 depends=('quickshell' 'uwsm' 'wl-clipboard')
 optdepends=('transmission-cli: the daemon it talks to (transmission-daemon)')
@@ -13,12 +17,12 @@ source=("git+$url.git")
 sha256sums=('SKIP')
 
 pkgver() {
-    cd "$pkgname"
+    cd "$_name"
     printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
 }
 
 package() {
-    cd "$pkgname"
+    cd "$_name"
     # The Quickshell config, where `qs -c seedling` finds it; a
     # ~/.config/quickshell/seedling of your own comes first
     install -d "$pkgdir/usr/share/seedling"
