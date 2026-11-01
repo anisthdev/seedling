@@ -4,7 +4,7 @@ A keyboard-driven client for `transmission-daemon` that looks and feels like the
 
 App ID: `io.github.anisthdev.Seedling` (set with `//@ pragma AppId` in `shell.qml`).
 
-History: this started as a GTK 4 / libadwaita app in Rust, now in `~/Projects/seedling-gtk`. It moved to Quickshell so it can share the shell's look and motion (QML components, matugen colours) instead of imitating them in GTK. That project's `trpc` crate and its notes on the RPC are still a good reference.
+History: this started as a GTK 4 / libadwaita app in Rust, now in `~/Projects/archive/seedling-gtk`. It moved to Quickshell so it can share the shell's look and motion (QML components, matugen colours) instead of imitating them in GTK. That project's `trpc` crate and its notes on the RPC are still a good reference.
 
 ## How it runs
 
