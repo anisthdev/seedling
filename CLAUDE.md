@@ -13,7 +13,7 @@ Seedling is a Quickshell config, separate from quickbar, that shows itself as on
 ```
 ./seedling            # open or close the menu, starting Seedling (opened) if it isn't running
 ./seedling show ID    # open it on that torrent's details (IPC `details`; qs keeps "show" for itself)
-qs -p ~/Projects/seedling ipc call seedling toggle|open|close|details ID
+qs -c seedling ipc call seedling toggle|open|close|details ID
 ```
 
 SUPER+T (`~/.config/hypr/bindings/utilities.lua`) runs `./seedling`. The bar's downloads dropdown (quickbar's `DownloadHub`, `docs/downloads.md` there) shows unfinished torrents with Seedling's badge and opens `seedling show ID` on a click. `io.github.anisthdev.Seedling.desktop` (symlinked into `~/.local/share/applications`, icon `transmission`) gives that badge and the launcher entry. `q`/Esc on the list, Ctrl+w and a click outside close it.

@@ -7,7 +7,7 @@ import "views"
 
 // Seedling as one of the shell's menus, like its movie search: a panel at
 // the bottom centre that springs open upwards, growing to fit the list or
-// the details, and folds back down. `qs -p <dir> ipc call seedling toggle`
+// the details, and folds back down. `qs -c seedling ipc call seedling toggle`
 // opens and closes it; it opens on starting. Keys go to whatever is on top:
 // an open dialog or the key help, else the torrent list or a torrent's
 // details, with tremc's bindings.
